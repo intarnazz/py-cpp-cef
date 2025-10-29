@@ -1,14 +1,18 @@
 # api.py
 
-#pip install duckduckgo-search
-
 import json
 
-# from selector import Selector
 from src.setings import Setings
 from src.storage import Storage
+from src.selector import Selector
+
+# from setings import Setings
+# from storage import Storage
+# from selector import Selector
 
 from duckduckgo_search import DDGS
+import requests
+import base64
 
 
 class Api:
@@ -20,9 +24,11 @@ class Api:
     def __init__(self) -> list:
         self.setings = Setings()
         self.storage = Storage()
+        self.selector = Selector()
 
 
 api = Api()
+
 
 def get_high_quality_image(query: str) -> str:
     """
@@ -31,13 +37,30 @@ def get_high_quality_image(query: str) -> str:
     """
     try:
         with DDGS() as ddgs:
-            results = list(ddgs.images(query, max_results=1))
+            results = list(ddgs.images(f"{query} poster", max_results=1))
             if not results:
                 return "Не найдено изображений."
-            
-            return results[0]['image']
+
+            return results[0]["image"]
     except:
-        return ''
+        return ""
+
+def get_all_games():
+    res = api.storage.get(api.setings.COMPUTERS_JSON_FILE)
+    for item in res:
+        if "url" not in item or item["url"] == "":
+            item["url"] = get_high_quality_image(item["name"])
+        if "image_binary" not in item or item["image_binary"] == "":
+            try:
+                img_data = requests.get(item["url"]).content
+                item["image_binary"] = base64.b64encode(
+                    img_data
+                ).decode("utf-8")
+            except Exception:
+                item["image_binary"] = None
+
+    api.storage.set(api.setings.COMPUTERS_JSON_FILE, res)
+    return json.dumps(res)
 
 
 def handle_event(event_json: str) -> str:
@@ -46,15 +69,13 @@ def handle_event(event_json: str) -> str:
         case "game":
             match data["path"]["type"]:
                 case "get":
-                    res = api.storage.get(api.setings.COMPUTERS_JSON_FILE)
-
-                    for item in res:
-                        if "url" not in item or item["url"] == "":
-                            item["url"] = get_high_quality_image(item["name"])
-
-                    api.storage.set(api.setings.COMPUTERS_JSON_FILE, res)
-
-                    return json.dumps(res)
-
+                    return get_all_games()
+                case "content":
+                    api.selector.run(data["path"]["content"])
+                    
     result = {"status": "ok", "from": "Python", "echo": data}
     return json.dumps(result)
+
+
+# api.selector.run('stellar-blade')
+# input()

@@ -2,9 +2,9 @@
 
 import time
 from InquirerPy import inquirer
-from setings import Setings
-from storage import Storage
-# from checker import Checker
+from src.setings import Setings
+from src.storage import Storage
+from src.checker import Checker
 
 
 class Selector:
@@ -17,9 +17,9 @@ class Selector:
     def __init__(self) -> list:
         self.setings = Setings()
         self.storage = Storage()
-        # self.checker = Checker()
+        self.checker = Checker()
 
-    def select(self) -> list:
+    def select(self, content) -> list:
         """
         Дает пользователю выбрать путь для поиска.
         Если выбран "Проверять все" — возвращает весь список.
@@ -28,53 +28,41 @@ class Selector:
         :return: список выбранных элементов (всегда список, даже если один элемент)
         """
         computers = self.storage.get(self.setings.COMPUTERS_JSON_FILE)
+        selected = content
 
-        choices = [computer["path"] for computer in computers]
-        choices.insert(0, "🔎 Проверять все")
+        paths = [c.get("path") for c in computers if "path" in c]
+        if selected not in paths:
+            return False, 'Не верный Path в Selected'
 
-        selected = inquirer.select(
-            message="Выберите путь для поиска:",
-            choices=choices,
-            default="🔎 Проверять все",
-        ).execute()
+        # перемещаем выбранный объект в начало
+        selected_computer = next(
+            (computer for computer in computers if computer["path"] == selected),
+            None,
+        )
+        if selected_computer:
+            computers.remove(selected_computer)
+            computers.insert(0, selected_computer)
 
-        if selected == "🔎 Проверять все":
-            return computers
-        else:
-            # перемещаем выбранный объект в начало
-            selected_computer = next(
-                (computer for computer in computers if computer["path"] == selected),
-                None,
-            )
-            if selected_computer:
-                computers.remove(selected_computer)
-                computers.insert(0, selected_computer)
+            # сохраняем обновлённый порядок
+            self.storage.set(self.setings.COMPUTERS_JSON_FILE, computers)
 
-                # сохраняем обновлённый порядок
-                self.storage.set(self.setings.COMPUTERS_JSON_FILE, computers)
+        return [selected_computer] if selected_computer else []
 
-            return [selected_computer] if selected_computer else []
+    def run(self, content) -> bool:
+        """
+        Запуск терминала.
 
-    # def run(self) -> bool:
-    #     """
-    #     Запуск запуск терминала.
+        :return: bool
+        """
+        try:
+            result = self.select(content)
+            found = self.checker.check(result)
 
-    #     :return: bool
-    #     """
-    #     try:
-    #         found = self.checker.check(self.select())
-    #         if not found:
-    #             print("\n❌ Ничего не найдено.")
-    #             input(
-    #                 "Нажмите Enter, чтобы вернуться к выбору пути, "
-    #                 "или подождите 60 секунд...\n"
-    #             )
-    #             return False
-    #         else:
-    #             # если найдено — возвращаемся к выбору
-    #             return False
-    #     except Exception as e:
-    #         print(f"Ошибка: {e}")
+            if not found:
+                return False
+            else:
+                return True
+        except Exception as e:
+            print(f"Ошибка: {e}")
 
-    #     time.sleep(10)
-    #     return True
+        return False
